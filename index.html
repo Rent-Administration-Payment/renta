@@ -179,6 +179,18 @@
     .btn-primary:active { transform: translateY(0); }
     .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--muted); margin-top: 10px; }
     .btn-secondary:hover { border-color: var(--accent-dim); color: var(--text); }
+    .btn-reprint {
+      background: transparent;
+      border: 1px solid rgba(200, 169, 110, 0.25);
+      color: var(--accent-dim);
+      margin-top: 10px;
+    }
+    .btn-reprint:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-reprint:disabled {
+      opacity: 0.25;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
     .btn-danger {
       background: transparent;
       border: 1px solid rgba(192,57,43,0.3);
@@ -302,6 +314,10 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Generar y Descargar PDF
     </button>
+    <button class="btn btn-reprint" id="btnReprint" onclick="reprintLast()" disabled>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
+      <span id="btnReprintLabel">Reimprimir último recibo</span>
+    </button>
     <button class="btn btn-secondary" onclick="resetForm()">Limpiar campos</button>
     <button class="btn btn-danger" onclick="resetFolio()">&#8635; Reiniciar contador de recibos</button>
   </div>
@@ -310,7 +326,8 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    const STORAGE_KEY = 'recibo_folio_v1';
+    const STORAGE_KEY      = 'recibo_folio_v1';
+    const LAST_RECEIPT_KEY = 'recibo_last_v1';
     const MESES = ['enero','febrero','marzo','abril','mayo','junio',
                    'julio','agosto','septiembre','octubre','noviembre','diciembre'];
     const today = new Date();
@@ -330,6 +347,7 @@
       document.getElementById('periodoHasta').value = `${ny}-${String(nm + 1).padStart(2,'0')}`;
 
       renderFolio();
+      refreshReprintBtn();
     }
 
     // ── Folio ────────────────────────────────────────────────────────
@@ -387,31 +405,49 @@
       return ok;
     }
 
-    // ── PDF ──────────────────────────────────────────────────────────
-    function generatePDF() {
-      if (!validate()) return;
+    // ── Last receipt ─────────────────────────────────────────────────
+    function saveLastReceipt(data) {
+      localStorage.setItem(LAST_RECEIPT_KEY, JSON.stringify(data));
+      refreshReprintBtn();
+    }
 
+    function loadLastReceipt() {
+      try { return JSON.parse(localStorage.getItem(LAST_RECEIPT_KEY)); }
+      catch { return null; }
+    }
+
+    function refreshReprintBtn() {
+      const last = loadLastReceipt();
+      const btn  = document.getElementById('btnReprint');
+      const lbl  = document.getElementById('btnReprintLabel');
+      if (last) {
+        btn.disabled = false;
+        lbl.textContent = `Reimprimir recibo No. ${last.folio}`;
+      } else {
+        btn.disabled = true;
+        lbl.textContent = 'Reimprimir último recibo';
+      }
+    }
+
+    function reprintLast() {
+      const last = loadLastReceipt();
+      if (!last) return;
+      buildPDF(last);
+      showToast(`↻ Reimpresión del recibo ${last.folio} descargada`);
+    }
+
+    // ── PDF builder (shared) ─────────────────────────────────────────
+    function buildPDF({ folio, fecha, lugar, nombre, periodo }) {
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ unit: 'mm', format: 'letter' });
-
-      const folio   = String(getCurrentFolio()).padStart(5, '0');
-      const fecha   = `${today.getDate()} de ${MESES[today.getMonth()]} de ${today.getFullYear()}`;
-      const lugar   = document.getElementById('lugar').value.trim();
-      const nombre  = document.getElementById('arrendatario').value.trim();
-      const desde   = formatMonth(document.getElementById('periodoDesde').value);
-      const hasta   = formatMonth(document.getElementById('periodoHasta').value);
-      const periodo = `${desde} - ${hasta}`;
-
       const W = 215.9, margin = 25;
       let y = 25;
 
-      // Double border
       doc.setDrawColor(100, 90, 60); doc.setLineWidth(0.8);
       doc.rect(12, 12, W - 24, 270);
       doc.setLineWidth(0.3);
       doc.rect(14, 14, W - 28, 266);
 
-      // Title
       doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
       doc.setTextColor(30, 30, 30);
       doc.text('RECIBO DE PAGO DE RENTA (EFECTIVO)', W / 2, y, { align: 'center' });
@@ -419,7 +455,6 @@
       doc.setLineWidth(0.4); doc.setDrawColor(150, 130, 80);
       doc.line(margin, y, W - margin, y); y += 8;
 
-      // Folio + fecha
       doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(50,50,50);
       doc.text(`RECIBO No.: ${folio}`, margin, y);
       doc.setFont('helvetica', 'normal');
@@ -430,33 +465,27 @@
         doc.setDrawColor(220, 210, 190); doc.setLineWidth(0.2);
         doc.line(margin, y, W - margin, y); y += 8;
       }
-
       function sLabel(txt) {
         doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(100,80,30);
         doc.text(txt, margin, y); y += 6;
       }
-
       function sVal(txt, italic) {
         doc.setFont('helvetica', italic ? 'italic' : 'normal');
         doc.setFontSize(12); doc.setTextColor(20,20,20);
         doc.text(txt, margin, y); y += 6;
       }
 
-      // RECIBÍ DE
       sLabel('RECIBÍ DE:');
       sLabel('Nombre del arrendatario:'); y -= 2;
       sVal(nombre); hr();
 
-      // CANTIDAD
       sLabel('LA CANTIDAD DE:');
       sVal('$ 12,000.00 MXN');
       sVal('(DOCE MIL PESOS 00/100 M.N.)', true); hr();
 
-      // CONCEPTO
       sLabel('POR CONCEPTO DE:');
       sVal(`Pago de renta correspondiente al periodo: ${periodo}`); hr();
 
-      // Signatures
       y += 8;
       const sigW = 65, sigL = margin + 10, sigR = W - margin - sigW - 10;
       doc.setDrawColor(60,60,60); doc.setLineWidth(0.5);
@@ -467,14 +496,29 @@
       doc.text('FIRMA DEL ARRENDADOR', sigL + sigW/2, y, { align:'center' });
       doc.text('NOMBRE Y FIRMA DEL ARRENDATARIO', sigR + sigW/2, y, { align:'center' });
 
-      // Footer note
       y += 16;
       doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(160,150,130);
       doc.text('Este recibo es válido como comprobante de pago de renta en efectivo.', W/2, y, { align:'center' });
 
       doc.save(`recibo-renta-${folio}.pdf`);
+    }
 
-      // Increment AFTER successful save
+    // ── PDF ──────────────────────────────────────────────────────────
+    function generatePDF() {
+      if (!validate()) return;
+
+      const folio   = String(getCurrentFolio()).padStart(5, '0');
+      const fecha   = `${today.getDate()} de ${MESES[today.getMonth()]} de ${today.getFullYear()}`;
+      const lugar   = document.getElementById('lugar').value.trim();
+      const nombre  = document.getElementById('arrendatario').value.trim();
+      const desde   = formatMonth(document.getElementById('periodoDesde').value);
+      const hasta   = formatMonth(document.getElementById('periodoHasta').value);
+      const periodo = `${desde} - ${hasta}`;
+
+      const data = { folio, fecha, lugar, nombre, periodo };
+      buildPDF(data);
+      saveLastReceipt(data);
+
       incrementFolio();
       showToast(`✓ Recibo ${folio} generado y descargado`);
     }
