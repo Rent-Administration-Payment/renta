@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Generador de Recibo de Renta</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f0f0f;
+      --surface:   #1a1a1a;
+      --border:    #2e2e2e;
+      --accent:    #c8a96e;
+      --accent-dim:#8c6f3f;
+      --text:      #e8e2d9;
+      --muted:     #7a7570;
+      --danger:    #c0392b;
+      --success:   #4caf7d;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 20px 80px;
+    }
+
+    header { text-align: center; margin-bottom: 48px; }
+    header .eyebrow {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.25em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    header h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: clamp(28px, 5vw, 42px);
+      font-weight: 400;
+      color: var(--text);
+      line-height: 1.15;
+    }
+    header p { margin-top: 10px; font-size: 14px; color: var(--muted); }
+    .divider { width: 48px; height: 1px; background: var(--accent); margin: 20px auto 0; opacity: 0.6; }
+
+    .card {
+      width: 100%;
+      max-width: 620px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 40px;
+    }
+
+    .section-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 20px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .fields-group { margin-bottom: 36px; }
+    .field { margin-bottom: 18px; }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 300;
+      padding: 11px 14px;
+      outline: none;
+      transition: border-color 0.2s;
+      -webkit-appearance: none;
+    }
+    input:focus { border-color: var(--accent); }
+    input::placeholder { color: #3e3e3e; }
+    input[readonly] { opacity: 0.5; cursor: default; pointer-events: none; }
+
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+    /* Folio display */
+    .folio-box {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 14px 18px;
+    }
+    .folio-number {
+      font-family: 'DM Mono', monospace;
+      font-size: 28px;
+      font-weight: 500;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+    }
+    .folio-meta {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      text-align: right;
+      line-height: 1.7;
+    }
+    .folio-meta span { display: block; }
+    .folio-meta .auto-tag {
+      color: var(--accent-dim);
+      font-size: 9px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    /* Fixed badge */
+    .fixed-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--accent-dim);
+      letter-spacing: 0.07em;
+      background: rgba(200, 169, 110, 0.06);
+      border: 1px solid rgba(200, 169, 110, 0.18);
+      border-radius: 2px;
+      padding: 4px 10px;
+      margin-top: 7px;
+    }
+
+    /* Error */
+    .error { font-size: 12px; color: var(--danger); margin-top: 5px; display: none; }
+    .field.has-error input { border-color: var(--danger); }
+    .field.has-error .error { display: block; }
+
+    /* Buttons */
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 15px;
+      border: none;
+      border-radius: 3px;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: var(--accent); color: #0f0f0f; }
+    .btn-primary:hover { background: #d4b87a; transform: translateY(-1px); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--muted); margin-top: 10px; }
+    .btn-secondary:hover { border-color: var(--accent-dim); color: var(--text); }
+    .btn-danger {
+      background: transparent;
+      border: 1px solid rgba(192,57,43,0.3);
+      color: rgba(192,57,43,0.6);
+      margin-top: 10px;
+      font-size: 11px;
+      padding: 11px;
+    }
+    .btn-danger:hover { border-color: var(--danger); color: var(--danger); }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%) translateY(16px);
+      background: #1e1e1e;
+      border: 1px solid var(--success);
+      color: var(--success);
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      padding: 12px 24px;
+      border-radius: 3px;
+      opacity: 0;
+      transition: opacity 0.25s, transform 0.25s;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    footer { margin-top: 40px; font-size: 11px; color: #3a3a3a; font-family: 'DM Mono', monospace; letter-spacing: 0.1em; }
+
+    @media (max-width: 480px) {
+      .card { padding: 28px 20px; }
+      .row-2 { grid-template-columns: 1fr; }
+      .folio-number { font-size: 22px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="eyebrow">Herramienta administrativa</div>
+    <h1>Recibo de Pago de Renta</h1>
+    <p>Genera e imprime recibos en formato PDF</p>
+    <div class="divider"></div>
+  </header>
+
+  <div class="card">
+
+    <!-- FOLIO -->
+    <div class="fields-group">
+      <div class="section-label">Número de recibo</div>
+      <div class="folio-box">
+        <div class="folio-number" id="folioDisplay">00001</div>
+        <div class="folio-meta">
+          <span class="auto-tag">&#9679; automático</span>
+          <span id="folioMeta">Primer recibo</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- DATOS -->
+    <div class="fields-group">
+      <div class="section-label">Datos del recibo</div>
+      <div class="row-2">
+        <div class="field">
+          <label>Fecha</label>
+          <input type="text" id="fecha" readonly />
+        </div>
+        <div class="field" id="field-lugar">
+          <label for="lugar">Lugar</label>
+          <input type="text" id="lugar" value="Ciudad de México" placeholder="Ciudad de México" />
+          <div class="error">Campo requerido</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ARRENDATARIO -->
+    <div class="fields-group">
+      <div class="section-label">Arrendatario</div>
+      <div class="field" id="field-arrendatario">
+        <label for="arrendatario">Nombre completo</label>
+        <input type="text" id="arrendatario" placeholder="Nombre Apellido Apellido" />
+        <div class="error">Campo requerido</div>
+      </div>
+    </div>
+
+    <!-- MONTO FIJO -->
+    <div class="fields-group">
+      <div class="section-label">Monto</div>
+      <div class="field">
+        <label>Monto (MXN)</label>
+        <input type="text" value="$ 12,000.00 MXN" readonly />
+        <div class="fixed-badge">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          DOCE MIL PESOS 00/100 M.N. &nbsp;·&nbsp; valor fijo
+        </div>
+      </div>
+    </div>
+
+    <!-- PERIODO -->
+    <div class="fields-group">
+      <div class="section-label">Periodo de pago</div>
+      <div class="row-2">
+        <div class="field" id="field-periodoDesde">
+          <label for="periodoDesde">Desde</label>
+          <input type="month" id="periodoDesde" />
+          <div class="error">Campo requerido</div>
+        </div>
+        <div class="field" id="field-periodoHasta">
+          <label for="periodoHasta">Hasta</label>
+          <input type="month" id="periodoHasta" />
+          <div class="error">Campo requerido</div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" onclick="generatePDF()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Generar y Descargar PDF
+    </button>
+    <button class="btn btn-secondary" onclick="resetForm()">Limpiar campos</button>
+    <button class="btn btn-danger" onclick="resetFolio()">&#8635; Reiniciar contador de recibos</button>
+  </div>
+
+  <footer>generado localmente · sin datos enviados al servidor</footer>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const STORAGE_KEY = 'recibo_folio_v1';
+    const MESES = ['enero','febrero','marzo','abril','mayo','junio',
+                   'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const today = new Date();
+
+    // ── Init ─────────────────────────────────────────────────────────
+    function init() {
+      // Auto date
+      document.getElementById('fecha').value =
+        `${today.getDate()} de ${MESES[today.getMonth()]} de ${today.getFullYear()}`;
+
+      // Default period: current month → next month
+      const y  = today.getFullYear();
+      const m  = today.getMonth();         // 0-indexed
+      const nm = m === 11 ? 0 : m + 1;
+      const ny = m === 11 ? y + 1 : y;
+      document.getElementById('periodoDesde').value = `${y}-${String(m + 1).padStart(2,'0')}`;
+      document.getElementById('periodoHasta').value = `${ny}-${String(nm + 1).padStart(2,'0')}`;
+
+      renderFolio();
+    }
+
+    // ── Folio ────────────────────────────────────────────────────────
+    function getCurrentFolio() {
+      return parseInt(localStorage.getItem(STORAGE_KEY) || '1');
+    }
+
+    function renderFolio() {
+      const n = getCurrentFolio();
+      document.getElementById('folioDisplay').textContent = String(n).padStart(5, '0');
+      const prev = n - 1;
+      document.getElementById('folioMeta').textContent =
+        prev === 0 ? 'Primer recibo' :
+        `${prev} recibo${prev > 1 ? 's' : ''} generado${prev > 1 ? 's' : ''}`;
+    }
+
+    function incrementFolio() {
+      localStorage.setItem(STORAGE_KEY, getCurrentFolio() + 1);
+      renderFolio();
+    }
+
+    function resetFolio() {
+      if (!confirm('¿Reiniciar el contador al número 1?\nEsto no afecta los PDFs ya generados.')) return;
+      localStorage.setItem(STORAGE_KEY, '1');
+      renderFolio();
+      showToast('Contador reiniciado → 00001');
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────
+    function formatMonth(ym) {
+      if (!ym) return '';
+      const [, mm] = ym.split('-');
+      return MESES[parseInt(mm) - 1];
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // ── Validation ───────────────────────────────────────────────────
+    function validate() {
+      let ok = true;
+      ['lugar','arrendatario','periodoDesde','periodoHasta'].forEach(id => {
+        const wrap = document.getElementById(`field-${id}`);
+        if (!wrap) return;
+        if (!document.getElementById(id).value.trim()) {
+          wrap.classList.add('has-error'); ok = false;
+        } else {
+          wrap.classList.remove('has-error');
+        }
+      });
+      return ok;
+    }
+
+    // ── PDF ──────────────────────────────────────────────────────────
+    function generatePDF() {
+      if (!validate()) return;
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit: 'mm', format: 'letter' });
+
+      const folio   = String(getCurrentFolio()).padStart(5, '0');
+      const fecha   = `${today.getDate()} de ${MESES[today.getMonth()]} de ${today.getFullYear()}`;
+      const lugar   = document.getElementById('lugar').value.trim();
+      const nombre  = document.getElementById('arrendatario').value.trim();
+      const desde   = formatMonth(document.getElementById('periodoDesde').value);
+      const hasta   = formatMonth(document.getElementById('periodoHasta').value);
+      const periodo = `${desde} - ${hasta}`;
+
+      const W = 215.9, margin = 25;
+      let y = 25;
+
+      // Double border
+      doc.setDrawColor(100, 90, 60); doc.setLineWidth(0.8);
+      doc.rect(12, 12, W - 24, 270);
+      doc.setLineWidth(0.3);
+      doc.rect(14, 14, W - 28, 266);
+
+      // Title
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+      doc.setTextColor(30, 30, 30);
+      doc.text('RECIBO DE PAGO DE RENTA (EFECTIVO)', W / 2, y, { align: 'center' });
+      y += 10;
+      doc.setLineWidth(0.4); doc.setDrawColor(150, 130, 80);
+      doc.line(margin, y, W - margin, y); y += 8;
+
+      // Folio + fecha
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(50,50,50);
+      doc.text(`RECIBO No.: ${folio}`, margin, y);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Lugar y fecha: ${lugar} a ${fecha}`, W - margin, y, { align: 'right' });
+      y += 14;
+
+      function hr() {
+        doc.setDrawColor(220, 210, 190); doc.setLineWidth(0.2);
+        doc.line(margin, y, W - margin, y); y += 8;
+      }
+
+      function sLabel(txt) {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(100,80,30);
+        doc.text(txt, margin, y); y += 6;
+      }
+
+      function sVal(txt, italic) {
+        doc.setFont('helvetica', italic ? 'italic' : 'normal');
+        doc.setFontSize(12); doc.setTextColor(20,20,20);
+        doc.text(txt, margin, y); y += 6;
+      }
+
+      // RECIBÍ DE
+      sLabel('RECIBÍ DE:');
+      sLabel('Nombre del arrendatario:'); y -= 2;
+      sVal(nombre); hr();
+
+      // CANTIDAD
+      sLabel('LA CANTIDAD DE:');
+      sVal('$ 12,000.00 MXN');
+      sVal('(DOCE MIL PESOS 00/100 M.N.)', true); hr();
+
+      // CONCEPTO
+      sLabel('POR CONCEPTO DE:');
+      sVal(`Pago de renta correspondiente al periodo: ${periodo}`); hr();
+
+      // Signatures
+      y += 8;
+      const sigW = 65, sigL = margin + 10, sigR = W - margin - sigW - 10;
+      doc.setDrawColor(60,60,60); doc.setLineWidth(0.5);
+      doc.line(sigL, y, sigL + sigW, y);
+      doc.line(sigR, y, sigR + sigW, y);
+      y += 5;
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(80,80,80);
+      doc.text('FIRMA DEL ARRENDADOR', sigL + sigW/2, y, { align:'center' });
+      doc.text('NOMBRE Y FIRMA DEL ARRENDATARIO', sigR + sigW/2, y, { align:'center' });
+
+      // Footer note
+      y += 16;
+      doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(160,150,130);
+      doc.text('Este recibo es válido como comprobante de pago de renta en efectivo.', W/2, y, { align:'center' });
+
+      doc.save(`recibo-renta-${folio}.pdf`);
+
+      // Increment AFTER successful save
+      incrementFolio();
+      showToast(`✓ Recibo ${folio} generado y descargado`);
+    }
+
+    // ── Reset fields ─────────────────────────────────────────────────
+    function resetForm() {
+      document.getElementById('arrendatario').value = '';
+      document.getElementById('lugar').value = 'Ciudad de México';
+      ['lugar','arrendatario','periodoDesde','periodoHasta'].forEach(id => {
+        const w = document.getElementById(`field-${id}`);
+        if (w) w.classList.remove('has-error');
+      });
+      showToast('Campos limpiados');
+    }
+
+    init();
+  </script>
+</body>
+</html>
